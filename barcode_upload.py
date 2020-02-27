@@ -13,13 +13,10 @@ from botocore.client import Config
 
 from constant import Constant # inheriting Constant class
 
-# Logger Config
-logger = logging.getLogger(__name__)
-
 class BarcodeUpload:
 
     def upload(barcode):
-        """Uploads the barcodes from current directory to S3 bucket"""
+        """Uploads the barcodes from current barcodes directory to S3 bucket"""
         filename = "./barcodes/" + barcode
         data = open(filename, 'rb')
         s3_upload = boto3.resource('s3', config=Config(signature_version='s3v4'))
@@ -28,7 +25,7 @@ class BarcodeUpload:
     barcodes = [f for f in listdir("./barcodes") if isfile(join("./barcodes", f))] # loads all the barcodes images from current barcodes directory
     for barcode in barcodes:
         upload(barcode)
-    logger.info('Barcodes uploaded successfully to the S3 bucket')
+    print('Barcodes uploaded successfully to the S3 bucket')
 
 
 

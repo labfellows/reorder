@@ -15,10 +15,10 @@ class Constant:
     logger.info("LF constants has been initiated!")
 
     S3_BUCKET_NAME = 'lf-scripting-examples'
-    EMAIL = 'raks@labfellows.com'
-    API_KEY = '70f7e376626b9382c09c4f71753abe31'
-    SUBDOMAIN = "labfellows"
-    BASE_URL = "http://api.labfellows.org/"
+    EMAIL = 'vick@labfellows.com'
+    API_KEY = '169e240d068e969b53347ffbfe552196'
+    SUBDOMAIN = 'homelab'
+    BASE_URL = 'http://api.labfellows.test:3000/'
     BASE_S3_URl = 'https://lf-scripting-examples.s3.amazonaws.com/'
 
     encoded_auth = base64.b64encode(('%s:%s' % (EMAIL, API_KEY)).encode('utf8')).decode( 'utf8').replace('\n', '')

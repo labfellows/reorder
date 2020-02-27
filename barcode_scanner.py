@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # Module:        barcode_scanner.py
 # Author:        Raks Raja - Development Team
-# Description:   This module is used to process the barcodes in the S3 bucket and updates the loaction IDs and the status of item line IDs
+# Description:   This module is used to process the barcodes from the S3 bucket and process check-in/check-out in inventory based on the location
 # Copyrights:    2020 (c) All Rights Reserved
 
 # Python libraries
@@ -10,6 +10,7 @@ import itertools
 import re
 import logging
 import json
+import random
 import boto3
 from boto3.session import Session
 
@@ -25,11 +26,40 @@ your_bucket = s3.Bucket('lf-scripting-examples')
 
 class BarcodeScanner:
 
+    def update_item_line_status(item_line_id, location_id):
+        """Scans the item line and updates the location id and checked in, checked out status """
+        check_in_check_out_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
+        identifier_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
+        identifier_definition_request = requests.get(identifier_url, headers=Constant.headers)
+        identifier_json = identifier_definition_request.json()
+        identifier_value = identifier_json['identifier']
+        check_in_check_out_status_finder_url = Constant.BASE_URL + 'v2/inventory_item_lines?identifier=%s' % (identifier_value)
+        check_in_check_out_status_definition_request = requests.get(check_in_check_out_status_finder_url, headers=Constant.headers)
+        if check_in_check_out_status_definition_request.status_code != 200:
+            print('Error! Unable to find the status of Identifier ' + str(identifier_value))
+            return
+        check_in_check_out_status_response = check_in_check_out_status_definition_request.json()
+        if check_in_check_out_status_response['checked_out']:
+            value = False
+            status = 'checked-in'
+        else:
+            value = True
+            status = 'checked-out'
+        param = json.dumps({
+            "checked_out": value,
+            "location_id": location_id
+        })
+        requests.patch(check_in_check_out_url, data=param, headers=Constant.headers) #updates the loaction id and check in, check out status through api
+        print('The item line ID ' + str(item_line_id) + ' has been ' + str(status) + ' for the location ID '+ str(location_id))
+
+
+
     files = []
     barcode_urls = []
     for s3_file in your_bucket.objects.all():
         files.append(s3_file.key)
         barcode_urls.append(Constant.BASE_S3_URl + s3_file.key)
+    random.shuffle(files)
 
     location_files = [idx for idx in files if idx[0].lower() == 'L'.lower()]
     location_ids = []
@@ -37,7 +67,6 @@ class BarcodeScanner:
         location_id = re.findall('\d+', location_file)
         location_ids.append(location_id)
     location_ids = list(itertools.chain.from_iterable(location_ids))
-
 
     item_files = [idx for idx in files if idx[0].lower() == 'I'.lower()]
     item_ids = []
@@ -47,45 +76,24 @@ class BarcodeScanner:
         item_ids.append(id[0])
         item_line_ids.append(id[1])
     item_ids = list(dict.fromkeys(item_ids))
+    random.shuffle(location_ids)
+    random.shuffle(item_line_ids)
 
-    print (location_ids)
-    print (item_ids)
-    print(item_line_ids)
+    if len(files) >= 100:
+        files = files[:100]
 
-    def get_item_line_id(item_line_id, location_id):
-        """Scans the item line and updates the location id and checked in, checked out status """
-        check_in_out_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
-        category_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s/inventory_audit_lines' % (item_line_id)
-        categorty_definition_request = requests.get(category_url, headers=Constant.headers)
-        response_json = categorty_definition_request.json()
-        description_list = [sub['description'] for sub in response_json['data']]
-        for description in description_list:
-            if 'checked in' in description or 'Item placed ' in description:
-                data = json.dumps({
-                    "checked_out": True,
-                    "checked_in": False,
-                    "location_id":location_id
-                })
-                requests.patch(check_in_out_url, data=data,  headers=Constant.headers) #update the location id and check-in/checkout status
+    current_location_id = False
+    for file in files:
+        if 'LOC' in file:
+            current_location_id = int(re.findall('\d+', file)[0])
+            location_url = Constant.BASE_URL + 'v2/locations/%s' % (current_location_id)
+            location_definition_request = requests.get(location_url, headers=Constant.headers)
+            if location_definition_request.status_code == 404:
+                print('Error! Location ID ' + str(current_location_id) + ' does not exists!')
+            print('Current Location ID: ' + str(current_location_id))
+            continue
+        if 'INV' in file:
+            if not current_location_id:
                 continue
-            if 'checked out' in description:
-                data = json.dumps({
-                    "checked_in": True,
-                    "checked_out": False,
-                    "location_id": location_id
-                })
-                requests.patch(check_in_out_url, data=data,headers=Constant.headers) ##update the location id and check-in/checkout status
-                continue
-        logger.info('Location ID and status has been updated successfully for the item line ' + str(item_line_id))
-
-    location_id_list = [1, 14, 243, 245, 246]
-
-    item_line_id_list1 = item_line_ids[:5]
-    item_line_id_list2 = item_line_ids[10:15]
-    item_line_id_list2 = item_line_ids[15:20]
-    item_line_id_list2 = item_line_ids[20:25]
-    item_line_id_list2 = item_line_ids[25:30]
-
-    for location_id in location_id_list:
-        for item_line_id in item_line_id_list1:
-            get_item_line_id(item_line_id, location_id)
+            item_line_id = int(re.findall('\d+', file)[1])
+            update_item_line_status(item_line_id, current_location_id)

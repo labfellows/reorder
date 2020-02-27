@@ -41,6 +41,6 @@ class InventoryItem:
         item_line_id = get_item_line_ids(item_id)
         item_line_ids.append(item_line_id)
 
-    logger.info('Location IDS: ' + str(location_ids))
-    logger.info('Item IDS: ' + str(item_ids))
-    logger.info('Item Line IDS: ' + str(item_line_ids))
+    print('Location IDS: ' + str(location_ids))
+    print('Item IDS: ' + str(item_ids))
+    print('Item Line IDS: ' + str(item_line_ids))
