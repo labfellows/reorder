@@ -35,7 +35,7 @@ class BarcodeScanner:
         identifier_value = identifier_json['identifier']
         check_in_check_out_status_finder_url = Constant.BASE_URL + 'v2/inventory_item_lines?identifier=%s' % (identifier_value)
         check_in_check_out_status_definition_request = requests.get(check_in_check_out_status_finder_url, headers=Constant.headers)
-        if check_in_check_out_status_definition_request.status_code != 200:
+        if check_in_check_out_status_definition_request.status_code == 404:
             print('Error! Unable to find the status of Identifier ' + str(identifier_value))
             return
         check_in_check_out_status_response = check_in_check_out_status_definition_request.json()
