@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
 # Module:        barcode_scanner.py
 # Author:        Raks Raja - Development Team
-# Description:   This module is used to process the barcodes from the S3 bucket and process check-in/check-out in inventory based on the location
+# Description:   This module is used to process the barcodes in the S3 bucket and updates the loaction IDs and the status of item line IDs
 # Copyrights:    2020 (c) All Rights Reserved
 
 # Python libraries
 import requests
 import itertools
 import re
-import logging
 import json
 import random
 import boto3
@@ -16,47 +15,53 @@ from boto3.session import Session
 
 from constant import Constant #Inheriting Constant class
 
-# Logger Config
-logger = logging.getLogger(__name__)
-
 # S3 bucket connection params
 session = Session()
 s3 = session.resource('s3')
-your_bucket = s3.Bucket('lf-scripting-examples')
+s3_bucket = s3.Bucket(Constant.S3_BUCKET_NAME)
+
 
 class BarcodeScanner:
 
     def update_item_line_status(item_line_id, location_id):
         """Scans the item line and updates the location id and checked in, checked out status """
-        check_in_check_out_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
-        identifier_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
-        identifier_definition_request = requests.get(identifier_url, headers=Constant.headers)
-        identifier_json = identifier_definition_request.json()
-        identifier_value = identifier_json['identifier']
-        check_in_check_out_status_finder_url = Constant.BASE_URL + 'v2/inventory_item_lines?identifier=%s' % (identifier_value)
-        check_in_check_out_status_definition_request = requests.get(check_in_check_out_status_finder_url, headers=Constant.headers)
-        if check_in_check_out_status_definition_request.status_code == 404:
-            print('Error! Unable to find the status of Identifier ' + str(identifier_value))
-            return
-        check_in_check_out_status_response = check_in_check_out_status_definition_request.json()
-        if check_in_check_out_status_response['checked_out']:
-            value = False
-            status = 'checked-in'
-        else:
-            value = True
-            status = 'checked-out'
-        param = json.dumps({
-            "checked_out": value,
-            "location_id": location_id
-        })
-        requests.patch(check_in_check_out_url, data=param, headers=Constant.headers) #updates the loaction id and check in, check out status through api
-        print('The item line ID ' + str(item_line_id) + ' has been ' + str(status) + ' for the location ID '+ str(location_id))
-
-
+        try:
+            check_in_check_out_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
+            location_url = Constant.BASE_URL + 'v2/inventory_item_lines/%s' % (item_line_id)
+            location_definition_request = requests.get(location_url, headers=Constant.headers)
+            if location_definition_request.status_code != 200:
+                print('An exception has occured while processing the API request for the item line ID%s: %s %s' % (item_line_id, location_definition_request.status_code, location_definition_request.reason))
+                return
+            location_json = location_definition_request.json()
+            previous_location_id = location_json['location']['id']
+            check_in_check_out_status_finder_url = Constant.BASE_URL + 'v2/inventory_item_lines?line_id=%s' % (item_line_id)
+            check_in_check_out_status_definition_request = requests.get(check_in_check_out_status_finder_url, headers=Constant.headers)
+            if check_in_check_out_status_definition_request.status_code != 200:
+                print('An exception has occured while processing the API request for the item line ID %s: %s %s' % (item_line_id, check_in_check_out_status_definition_request.status_code, check_in_check_out_status_definition_request.reason))
+                return
+            check_in_check_out_status_response = check_in_check_out_status_definition_request.json()
+            if location_id == previous_location_id:
+                if check_in_check_out_status_response['checked_out']:
+                    value = False
+                    status = 'checked-in'
+                else:
+                    value = True
+                    status = 'checked-out'
+            else:
+                value = False
+                status = 'checked-in'
+            param = json.dumps({
+                "checked_out": value,
+                "location_id": location_id
+            })
+            requests.patch(check_in_check_out_url, data=param, headers=Constant.headers) #updates the loaction id and check in, check out status through api
+            print('The item line ID ' + str(item_line_id) + ' has been ' + str(status) + ' for the location ID '+ str(location_id))
+        except Exception as exception:
+            print('An exception has occured: ' + str(exception))
 
     files = []
     barcode_urls = []
-    for s3_file in your_bucket.objects.all():
+    for s3_file in s3_bucket.objects.all():
         files.append(s3_file.key)
         barcode_urls.append(Constant.BASE_S3_URl + s3_file.key)
     random.shuffle(files)
@@ -78,6 +83,9 @@ class BarcodeScanner:
     item_ids = list(dict.fromkeys(item_ids))
     random.shuffle(location_ids)
     random.shuffle(item_line_ids)
+    print('Location IDs: ' + str(location_ids))
+    print('Item IDs: ' + str(item_ids))
+    print('Item line IDs: ' + str(item_line_ids))
 
     if len(files) >= 100:
         files = files[:100]
@@ -88,8 +96,8 @@ class BarcodeScanner:
             current_location_id = int(re.findall('\d+', file)[0])
             location_url = Constant.BASE_URL + 'v2/locations/%s' % (current_location_id)
             location_definition_request = requests.get(location_url, headers=Constant.headers)
-            if location_definition_request.status_code == 404:
-                print('Error! Location ID ' + str(current_location_id) + ' does not exists!')
+            if location_definition_request.status_code != 200:
+                print(('An exception has occured while processing the Location ID  %s: %s %s' % (current_location_id, location_definition_request.status_code, location_definition_request.reason)))
             print('Current Location ID: ' + str(current_location_id))
             continue
         if 'INV' in file:
